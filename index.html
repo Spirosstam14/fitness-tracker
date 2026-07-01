@@ -48,9 +48,9 @@
   .bubble b{font-weight:700}
   .chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
   .chips button{background:var(--card2);border:1px solid var(--line);color:var(--muted);border-radius:16px;padding:6px 11px;font-size:12px;cursor:pointer}
-  .chatin{display:flex;gap:8px}
-  .chatin input{flex:1}
-  .chatin button{width:auto;padding:11px 16px}
+  .chatin{display:flex;gap:8px;align-items:center}
+  .chatin input{flex:1 1 auto;min-width:0;width:auto}
+  .chatin button.btn{width:auto;flex:0 0 auto;padding:11px 18px}
   .pill{display:inline-block;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600}
   .pill.good{background:rgba(59,167,118,.16);color:var(--accent)}
   .pill.warn{background:rgba(224,161,60,.16);color:var(--warn)}
@@ -201,6 +201,10 @@
   <section id="diet" class="view">
     <div class="card">
       <h2>Meal plan <span class="note" style="font-weight:400">· tap edit to change anything</span></h2>
+      <div class="row" style="margin-bottom:12px;align-items:center">
+        <div style="flex:0 0 auto;color:var(--muted);font-size:13px">🛒 Where you shop</div>
+        <div><select id="shop-sel" onchange="setShop(this.value)"></select></div>
+      </div>
       <div class="daytabs" id="diet-tabs"></div>
       <div id="diet-body"></div>
     </div>
@@ -520,6 +524,9 @@ function drawVol(weeks){var ctx=document.getElementById('volChart');if(!ctx||!wi
 let dietDay=dayName(), editing=null;
 function getDiet(){return DB.get('diet',DEFAULT_DIET);}
 function saveDiet(d){DB.set('diet',d);}
+const SHOPS=['Any shop','Tesco','Sainsbury’s','ASDA','Morrisons','Aldi','Lidl','Waitrose','Marks & Spencer','Co-op','Iceland','Ocado'];
+function renderShop(){var s=DB.get('shop','Any shop');var el=document.getElementById('shop-sel');if(el)el.innerHTML=SHOPS.map(function(x){return '<option'+(x===s?' selected':'')+'>'+x+'</option>'}).join('');}
+function setShop(v){DB.set('shop',v);}
 function renderDiet(){
   document.getElementById('diet-tabs').innerHTML=DAYS.map(d=>'<button class="'+(d===dietDay?'on':'')+'" onclick="dietDay=\''+d+'\';editing=null;renderDiet()">'+d.slice(0,3)+'</button>').join('');
   const day=getDiet()[dietDay];const b=document.getElementById('diet-body');
@@ -558,15 +565,19 @@ function delMeal(i){const d=getDiet();d[dietDay].meals.splice(i,1);saveDiet(d);e
 function saveMeal(i){const d=getDiet();const g=v=>document.getElementById(v).value;
   d[dietDay].meals[i]={t:g('e-t')||'Meal',n:g('e-n'),kc:Math.round(+g('e-kc')||0),p:Math.round(+g('e-p')||0),c:Math.round(+g('e-c')||0),f:Math.round(+g('e-f')||0)};
   saveDiet(d);editing=null;renderDiet();renderDash();}
+const SHOP_TAG={'Tesco':'Tesco','Sainsbury’s':'Sainsbury','ASDA':'Asda','Morrisons':'Morrisons','Aldi':'Aldi','Lidl':'Lidl','Waitrose':'Waitrose','Marks & Spencer':'Marks','Co-op':'Co-op','Iceland':'Iceland','Ocado':'Ocado'};
 async function searchFood(){
   const q=document.getElementById('f-q').value.trim();if(!q)return;
-  const res=document.getElementById('f-res');res.innerHTML='<div class="note">Searching…</div>';
+  const res=document.getElementById('f-res');
+  const shop=DB.get('shop','Any shop');
+  res.innerHTML='<div class="note">Searching'+(shop&&shop!=='Any shop'?' '+shop:'')+'…</div>';
+  const storeParam=(shop&&shop!=='Any shop')?('&tagtype_0=stores&tag_contains_0=contains&tag_0='+encodeURIComponent(SHOP_TAG[shop]||shop)):'';
   try{
-    const url='https://world.openfoodfacts.org/cgi/search.pl?search_terms='+encodeURIComponent(q)+
-      '&search_simple=1&action=process&json=1&page_size=8&fields=product_name,brands,nutriments';
+    const url='https://world.openfoodfacts.org/cgi/search.pl?search_terms='+encodeURIComponent(q)+storeParam+
+      '&search_simple=1&action=process&json=1&page_size=10&fields=product_name,brands,stores,nutriments';
     const r=await fetch(url);const j=await r.json();
     const items=(j.products||[]).filter(p=>p.product_name&&p.nutriments&&(p.nutriments['energy-kcal_100g']||p.nutriments['energy_100g']));
-    if(!items.length){res.innerHTML='<div class="note">No matches — try a simpler term.</div>';return;}
+    if(!items.length){res.innerHTML='<div class="note">No matches'+(shop&&shop!=='Any shop'?' at '+shop+' — switch to “Any shop” above for more results':' — try a simpler term')+'.</div>';return;}
     res.innerHTML=items.slice(0,8).map(p=>{
       const n=p.nutriments;const kc=Math.round(n['energy-kcal_100g']||(n['energy_100g']/4.184)||0);
       const name=((p.product_name||'').slice(0,48)+(p.brands?' · '+p.brands.split(',')[0]:'')).replace(/'/g,'’');
@@ -598,7 +609,7 @@ function drawSteps(){const s=DB.get('steps',[]).slice().sort((a,b)=>a.date<b.dat
 
 document.getElementById('w-date').value=todayISO();
 document.getElementById('s-date').value=todayISO();
-renderDash();renderTraining();renderDiet();renderWList();renderSList();renderChips();renderChat();
+renderDash();renderTraining();renderDiet();renderWList();renderSList();renderChips();renderChat();renderShop();
 window.addEventListener('load',drawWeight);
 </script>
 </body>
