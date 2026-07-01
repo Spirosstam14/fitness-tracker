@@ -146,10 +146,11 @@
       <div class="chatlog" id="chat-log"></div>
       <div class="chatin"><input id="chat-in" placeholder="Ask me anything…" onkeydown="if(event.key==='Enter')sendChat()"><button class="btn" onclick="sendChat()">Send</button></div>
     </div>
-    <div class="grid cols3">
-      <div class="stat"><div class="k">Current weight</div><div class="v" id="d-weight">—</div><div class="d" id="d-weight-d"></div></div>
-      <div class="stat"><div class="k">This week</div><div class="v" id="d-sessions">—<small>/4</small></div><div class="d">sessions done</div></div>
-      <div class="stat"><div class="k">Avg steps</div><div class="v" id="d-steps">—</div><div class="d" id="d-steps-d"></div></div>
+    <div class="grid cols2">
+      <div class="stat"><div class="k">Weight · wk avg</div><div class="v" id="d-weight">—</div><div class="d" id="d-weight-d"></div></div>
+      <div class="stat"><div class="k">Sessions</div><div class="v" id="d-sessions">—<small>/4</small></div><div class="d" id="d-sessions-d">this week</div></div>
+      <div class="stat"><div class="k">Steps to 10k</div><div class="v" id="d-steps">—</div><div class="d" id="d-steps-d"></div></div>
+      <div class="stat"><div class="k">Calories today</div><div class="v" id="d-cals">—</div><div class="d" id="d-cals-d"></div></div>
     </div>
     <div class="card">
       <h2>Quick log</h2>
@@ -166,8 +167,8 @@
   </section>
 
   <section id="weight" class="view">
-    <div class="card"><h2>Weight trend</h2><canvas id="weightChart"></canvas>
-      <div class="note" style="margin-top:10px">Green band = your 80–82kg target zone.</div></div>
+    <div class="card"><h2>Weight trend <span class="note" style="font-weight:400">· weekly averages</span></h2><canvas id="weightChart"></canvas>
+      <div class="note" style="margin-top:10px">Each point is that week's average — smooths daily ups and downs. Green band = your 80–82kg target.</div></div>
     <div class="card"><h2>Log a weigh-in</h2>
       <div class="row"><div><label>Date</label><input type="date" id="w-date"></div>
         <div><label>Weight (kg)</label><input type="number" step="0.1" id="w-kg" placeholder="81.0"></div></div>
@@ -234,7 +235,7 @@
 <script>
 const DB={get:(k,d)=>{try{const v=localStorage.getItem('spiros_'+k);return v===null?d:JSON.parse(v)}catch(e){return d}},
   set:(k,v)=>localStorage.setItem('spiros_'+k,JSON.stringify(v))};
-const GOAL={low:80,high:82}, PROTEIN_TARGET=180;
+const GOAL={low:80,high:82}, PROTEIN_TARGET=180, STEPS_TARGET=10000;
 const DAYS=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 const SPLIT=[['Monday','Legs',false],['Tuesday','Push',false],['Wednesday','Rest',true],
   ['Thursday','Pull',false],['Friday','Rest',true],['Saturday','Arms + Chest',false],['Sunday','Rest',true]];
@@ -282,6 +283,9 @@ function mondayOf(d){const x=new Date(d);const day=(x.getDay()+6)%7;x.setDate(x.
 function fmtDate(s){return new Date(s+'T00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short'});}
 function dayName(){return DAYS[(new Date().getDay()+6)%7];}
 function sortW(){return DB.get('weighins',[]).slice().sort((a,b)=>a.date<b.date?-1:1);}
+function weeklyAverages(){var w=sortW(),map={};w.forEach(function(x){var m=mondayOf(x.date);(map[m]=map[m]||[]).push(x.kg);});
+  return Object.keys(map).sort().map(function(m){var a=map[m];return {mon:m,avg:a.reduce(function(s,v){return s+v},0)/a.length,n:a.length};});}
+function currentWeekAvg(){var wa=weeklyAverages();return wa.length?wa[wa.length-1]:null;}
 function weekSessions(){const wk=DB.get('workouts',{})[mondayOf(todayISO())]||{};return SPLIT.filter(s=>!s[2]&&wk[s[0]]&&wk[s[0]].done).length;}
 
 function nav(v){
@@ -295,26 +299,26 @@ function nav(v){
 }
 
 function coachMessage(){
-  const w=sortW(), last=w[w.length-1];
-  const hour=new Date().getHours();
-  const hi=hour<12?'Morning':hour<18?'Afternoon':'Evening';
-  let parts=[], focus='';
-  if(last){
-    const target=new Date(last.date);target.setDate(target.getDate()-14);
-    let ref=null;for(const x of w){if(new Date(x.date)<=target)ref=x;}
-    const inBand=last.kg>=GOAL.low&&last.kg<=GOAL.high;
-    if(inBand)parts.push('You’re sitting at <b>'+last.kg.toFixed(1)+'kg</b>, right in your 80–82kg band — exactly where you want to be.');
-    else if(last.kg>GOAL.high)parts.push('You’re at <b>'+last.kg.toFixed(1)+'kg</b>, a touch over the band. Nothing drastic — a steady nudge down and you’re there.');
-    else parts.push('You’re at <b>'+last.kg.toFixed(1)+'kg</b>, just under the band. Hold steady and keep building.');
-    if(ref){const dd=last.kg-ref.kg;
-      if(Math.abs(dd)<0.4)parts.push('Weight’s been stable the last fortnight — perfect for a recomp: same scale weight, leaner underneath.');
-      else if(dd<0)parts.push('You’re down '+Math.abs(dd).toFixed(1)+'kg over two weeks — fat’s coming off. Keep protein high so it’s fat, not muscle.');
-      else parts.push('You’re up '+dd.toFixed(1)+'kg over two weeks — worth watching if the goal is leaning out.');
+  var wa=weeklyAverages(), cw=wa[wa.length-1];
+  var ref=wa.length>=3?wa[wa.length-3]:(wa.length>=2?wa[0]:null);
+  var hour=new Date().getHours();
+  var hi=hour<12?'Morning':hour<18?'Afternoon':'Evening';
+  var parts=[], focus='';
+  if(cw){
+    var kg=cw.avg, inBand=kg>=GOAL.low&&kg<=GOAL.high;
+    if(inBand)parts.push('Your weekly average is <b>'+kg.toFixed(1)+'kg</b>, right in your 80–82kg band — exactly where you want to be.');
+    else if(kg>GOAL.high)parts.push('Your weekly average is <b>'+kg.toFixed(1)+'kg</b>, a touch over the band. Nothing drastic — a steady nudge down.');
+    else parts.push('Your weekly average is <b>'+kg.toFixed(1)+'kg</b>, just under the band. Hold steady and keep building.');
+    if(ref){var dd=kg-ref.avg;
+      if(Math.abs(dd)<0.4)parts.push('It’s been steady the last couple of weeks — perfect for a recomp: same weight, leaner underneath.');
+      else if(dd<0)parts.push('You’re down '+Math.abs(dd).toFixed(1)+'kg on average — fat’s coming off. Keep protein high so it’s fat, not muscle.');
+      else parts.push('The average is up '+dd.toFixed(1)+'kg — worth watching if the goal is leaning out.');
     }
-  }else parts.push('Log a weigh-in and I’ll start tracking your trend against the 80–82kg goal.');
-  const done=weekSessions();
-  const dow=(new Date().getDay()+6)%7;
-  const leftDays=6-dow;
+  }else parts.push('Log a few weigh-ins and I’ll track your weekly average against the 80–82kg goal.');
+  var last=cw?{kg:cw.avg}:null;
+  var done=weekSessions();
+  var dow=(new Date().getDay()+6)%7;
+  var leftDays=6-dow;
   if(done>=4)parts.push('And you’ve <b>hit all 4 sessions</b> this week — that’s the work that moves the needle. 👏');
   else if(done===0&&dow<2)parts.push('Fresh week — <b>0/4 sessions</b> so far, plenty of runway.');
   else parts.push('You’re <b>'+done+'/4 sessions</b> in this week'+(leftDays>0?' with '+leftDays+' day'+(leftDays>1?'s':'')+' left':'')+'.');
@@ -350,10 +354,10 @@ function sendChat(){
 function bestProteinDay(){var d=getDiet(),best=null;DAYS.forEach(function(k){if(d[k].meals.length>1){var p=Math.round(dayTotals(d[k]).p);if(!best||p>best.p)best={day:k,p:p};}});return best;}
 function coachReply(q){
   var s=q.toLowerCase();
-  var w=sortW(),last=w[w.length-1];
+  var cw=currentWeekAvg(),last=cw?{kg:cw.avg}:null;
   var done=weekSessions(),dn=dayName(),d=getDiet()[dn];
   var has=function(){for(var i=0;i<arguments.length;i++)if(s.indexOf(arguments[i])>=0)return true;return false;};
-  var wt=last?last.kg.toFixed(1):null, inBand=last&&last.kg>=GOAL.low&&last.kg<=GOAL.high;
+  var wt=cw?cw.avg.toFixed(1):null, inBand=cw&&cw.avg>=GOAL.low&&cw.avg<=GOAL.high;
   var built=d&&d.meals&&d.meals.length>1, tot=built?dayTotals(d):null;
   if(s==='hi'||s==='hey'||s==='yo'||has('hello','hiya','alright'))return 'Alright Spiros 👋 What do you need — training, food, a weight check, or a kick up the arse?';
   if(has('thank','cheers','nice one','legend'))return 'Anytime. Now go earn it. 💪';
@@ -361,7 +365,7 @@ function coachReply(q){
   if(has('cant be bothered','can’t be bothered','lazy','tired','skip','dont want','don’t want','no motivation','cba','motivat'))
     return 'I hear you. But you’re <b>'+done+'/4</b> this week and every session is a brick in that lean-out. You don’t have to smash it — just show up and do the '+((d&&d.tr!=='Rest')?d.tr.toLowerCase():'work')+'. 20 honest minutes beats a skipped day. The bloke in the after-photo says go. 🔥';
   if(has('weight','weigh','scale',' kg','heavier','lighter'))
-    return last?('You’re at <b>'+wt+'kg</b> — '+(inBand?'bang in your 80–82kg band. Hold it and lean out from here.':(last.kg>GOAL.high?'a touch over the band, nudge it down gently.':'just under — hold steady and build.'))+' Weigh in daily and I’ll track the trend for you.'):'Log a weigh-in and I’ll start tracking it against your 80–82kg goal.';
+    return last?('Your weekly average is <b>'+wt+'kg</b> — '+(inBand?'bang in your 80–82kg band. Hold it and lean out from here.':(last.kg>GOAL.high?'a touch over the band, nudge it down gently.':'just under — hold steady and build.'))+' Weigh in daily; the weekly average is what actually counts.'):'Log a few weigh-ins and I’ll track your weekly average against your 80–82kg goal.';
   if(has('today','what should i do','what now','right now','plan for today'))
     return ((d&&d.tr!=='Rest')?'Today’s a <b>'+d.tr+'</b> day — get that session in. ':'Today’s a <b>rest day</b> — recover, hit your steps, sleep well. ')+(built?('Food’s sorted: ~'+Math.round(tot.kc)+' kcal, '+Math.round(tot.p)+'g protein.'):'Meals for today aren’t built yet — pop into the Diet tab.');
   if(has('train','workout','gym','session','lift','exercise','split'))
@@ -376,7 +380,7 @@ function coachReply(q){
     return (built?('Today’s plan is ~<b>'+Math.round(tot.kc)+' kcal</b>. '):'')+'Across the week you run ~1,850–2,150 — training days higher, rest days leaner. That spread is what drives the recomp.';
   if(has('step','walk','cardio'))
     {var st=DB.get('steps',[]).slice().sort(function(a,b){return a.date<b.date?1:-1}).slice(0,7);var avg=st.length?Math.round(st.reduce(function(a,x){return a+x.count},0)/st.length):0;
-     return st.length?('You’re averaging <b>'+avg.toLocaleString()+' steps</b>. Aim 8–10k — the quiet fat-loss lever that costs you nothing.'):'Log your steps and aim 8–10k a day — easiest fat-loss lever there is.';}
+     return st.length?('You’re averaging <b>'+avg.toLocaleString()+' steps</b> — target’s <b>10k a day</b>. It’s the quiet fat-loss lever that costs you nothing.'):'Log your steps and aim for <b>10k a day</b> — easiest fat-loss lever there is.';}
   if(has('creatine'))return 'Creatine: <b>5g every day</b>, any time, no loading needed. Take it on rest days too — consistency is the whole game.';
   if(has('whey','shake','protein powder'))return 'Whey isolate, 1–2 scoops. It’s in your morning shake; a scoop post-workout is a great second hit. Isolate keeps the bloat down.';
   if(has('supplement','vitamin','omega','magnesium'))return 'Your stack: whey isolate, creatine 5g, vitamin D3, omega-3, and magnesium glycinate before bed for sleep. Simple and effective — skip the fancy stuff.';
@@ -392,17 +396,23 @@ function coachReply(q){
 
 function renderDash(){
   renderCoach();
-  const w=sortW(), last=w[w.length-1], prev=w[w.length-2];
-  document.getElementById('d-weight').innerHTML=last?last.kg.toFixed(1)+'<small> kg</small>':'—';
-  if(last&&prev){const dd=last.kg-prev.kg;document.getElementById('d-weight-d').textContent=(dd>0?'+':'')+dd.toFixed(1)+' kg since '+fmtDate(prev.date);}
+  var wa=weeklyAverages(), cw=wa[wa.length-1], pw=wa[wa.length-2];
+  document.getElementById('d-weight').innerHTML=cw?cw.avg.toFixed(1)+'<small> kg</small>':'—';
+  if(cw&&pw){var dd=cw.avg-pw.avg;document.getElementById('d-weight-d').textContent=(dd>0?'+':'')+dd.toFixed(1)+' kg vs last wk';}
+  else document.getElementById('d-weight-d').textContent=cw?('this week · '+cw.n+' log'+(cw.n>1?'s':'')):'log a weigh-in';
   document.getElementById('d-sessions').innerHTML=weekSessions()+'<small>/4</small>';
-  const st=DB.get('steps',[]).slice().sort((a,b)=>a.date<b.date?1:-1).slice(0,7);
-  if(st.length){const avg=Math.round(st.reduce((s,x)=>s+x.count,0)/st.length);
-    document.getElementById('d-steps').textContent=avg.toLocaleString();
-    document.getElementById('d-steps-d').textContent='last '+st.length+' logs';}
-  const dn=dayName(), d=DB.get('diet',DEFAULT_DIET)[dn], el=document.getElementById('d-today');
+  var stAll=DB.get('steps',[]);var tT=stAll.filter(function(x){return x.date===todayISO()})[0];
+  var todaySteps=tT?tT.count:0;var toGo=Math.max(0,STEPS_TARGET-todaySteps);
+  document.getElementById('d-steps').innerHTML=(toGo>0?toGo.toLocaleString():'✓ hit');
+  document.getElementById('d-steps-d').textContent=todaySteps?('today: '+todaySteps.toLocaleString()):'none logged today';
+  var dn=dayName(), d=DB.get('diet',DEFAULT_DIET)[dn];
+  if(d&&d.meals&&d.meals.length>1){var t=dayTotals(d);
+    document.getElementById('d-cals').innerHTML=Math.round(t.kc)+'<small> kcal</small>';
+    document.getElementById('d-cals-d').textContent=Math.round(t.p)+'g P · '+Math.round(t.c)+'g C · '+Math.round(t.f)+'g F';}
+  else{document.getElementById('d-cals').textContent='—';document.getElementById('d-cals-d').textContent='no plan today';}
+  var el=document.getElementById('d-today');
   if(d&&d.meals&&d.meals.length>1){el.innerHTML='<div class="pill good">'+dn+' · '+d.tr+'</div>'+
-    d.meals.map(m=>mealRowRO(m)).join('')+macroRow(dayTotals(d));}
+    d.meals.map(function(m){return mealRowRO(m)}).join('')+macroRow(dayTotals(d));}
   else el.innerHTML='<div class="pill warn">'+dn+' · '+(d?d.tr:'')+'</div><div class="tbd">'+dn+'’s meals aren’t built yet — add them in the Diet tab.</div>';
 }
 function mealRowRO(m){return '<div class="meal"><span class="kc">'+m.kc+'</span><div class="t">'+m.t+'</div><div class="n">'+esc(m.n)+'</div></div>';}
@@ -429,11 +439,11 @@ function delWeight(dt){DB.set('weighins',DB.get('weighins',[]).filter(x=>x.date!
 function renderWList(){const w=sortW().reverse().slice(0,12);
   document.getElementById('w-list').innerHTML=w.map(x=>'<div class="entry"><span>'+fmtDate(x.date)+'</span><span><b>'+x.kg.toFixed(1)+' kg</b> <span class="x" onclick="delWeight(\''+x.date+'\')">×</span></span></div>').join('')||'<div class="note">No entries yet.</div>';}
 let weightChart;
-function drawWeight(){const w=sortW();const ctx=document.getElementById('weightChart');if(!ctx||!window.Chart)return;if(weightChart)weightChart.destroy();
-  weightChart=new Chart(ctx,{type:'line',data:{labels:w.map(x=>fmtDate(x.date)),datasets:[
-    {label:'Weight',data:w.map(x=>x.kg),borderColor:'#4c9ffb',backgroundColor:'rgba(76,159,251,.12)',tension:.3,fill:true,pointRadius:3,pointBackgroundColor:'#4c9ffb'},
-    {label:'hi',data:w.map(()=>GOAL.high),borderColor:'rgba(59,167,118,.5)',borderDash:[5,5],pointRadius:0,fill:'+1'},
-    {label:'lo',data:w.map(()=>GOAL.low),borderColor:'rgba(59,167,118,.5)',borderDash:[5,5],pointRadius:0,backgroundColor:'rgba(59,167,118,.10)',fill:false}]},
+function drawWeight(){var wa=weeklyAverages();const ctx=document.getElementById('weightChart');if(!ctx||!window.Chart)return;if(weightChart)weightChart.destroy();
+  weightChart=new Chart(ctx,{type:'line',data:{labels:wa.map(function(x){return fmtDate(x.mon)}),datasets:[
+    {label:'Weekly avg',data:wa.map(function(x){return +x.avg.toFixed(1)}),borderColor:'#4c9ffb',backgroundColor:'rgba(76,159,251,.12)',tension:.3,fill:true,pointRadius:3,pointBackgroundColor:'#4c9ffb'},
+    {label:'hi',data:wa.map(function(){return GOAL.high}),borderColor:'rgba(59,167,118,.5)',borderDash:[5,5],pointRadius:0,fill:'+1'},
+    {label:'lo',data:wa.map(function(){return GOAL.low}),borderColor:'rgba(59,167,118,.5)',borderDash:[5,5],pointRadius:0,backgroundColor:'rgba(59,167,118,.10)',fill:false}]},
     options:{plugins:{legend:{display:false}},scales:{y:{grid:{color:'#2a3038'},ticks:{color:'#98a2b3'}},x:{grid:{display:false},ticks:{color:'#98a2b3',maxTicksLimit:8}}}}});}
 
 function getWk(){const mon=mondayOf(todayISO());const all=DB.get('workouts',{});all[mon]=all[mon]||{};return {mon,all};}
@@ -527,6 +537,7 @@ function saveDiet(d){DB.set('diet',d);}
 const SHOPS=['Any shop','Tesco','Sainsbury’s','ASDA','Morrisons','Aldi','Lidl','Waitrose','Marks & Spencer','Co-op','Iceland','Ocado'];
 function renderShop(){var s=DB.get('shop','Any shop');var el=document.getElementById('shop-sel');if(el)el.innerHTML=SHOPS.map(function(x){return '<option'+(x===s?' selected':'')+'>'+x+'</option>'}).join('');}
 function setShop(v){DB.set('shop',v);}
+function quickFood(t){var el=document.getElementById('f-q');if(el){el.value=t;searchFood();}}
 function renderDiet(){
   document.getElementById('diet-tabs').innerHTML=DAYS.map(d=>'<button class="'+(d===dietDay?'on':'')+'" onclick="dietDay=\''+d+'\';editing=null;renderDiet()">'+d.slice(0,3)+'</button>').join('');
   const day=getDiet()[dietDay];const b=document.getElementById('diet-body');
@@ -553,7 +564,8 @@ function mealEditor(m,i){
     '<div><label>F (g)</label><input id="e-f" type="number" value="'+m.f+'"></div></div>'+
     '<div class="row" style="margin-top:8px"><div><button class="btn" onclick="saveMeal('+i+')">Save</button></div>'+
     '<div><button class="btn sec" onclick="editing=null;renderDiet()">Cancel</button></div></div>'+
-    '<div class="foodbox"><label>🔍 Search a food to auto-fill macros (free database)</label>'+
+    '<div class="foodbox"><label>🔍 Find a food — auto-fills macros'+(DB.get('shop','Any shop')!=='Any shop'?' from '+DB.get('shop','Any shop'):'')+'</label>'+
+    '<div class="chips" style="margin:2px 0 8px">'+['Chicken','Beef','Salmon','Tuna','Eggs','Rice','Potatoes','Pasta','Bread','Milk','Yogurt','Oats'].map(function(x){return '<button onclick="quickFood(\''+x+'\')">'+x+'</button>'}).join('')+'</div>'+
     '<div class="row"><div style="flex:3"><input id="f-q" placeholder="e.g. chicken breast" onkeydown="if(event.key===\'Enter\')searchFood()"></div>'+
     '<div><input id="f-g" type="number" value="100" title="grams"></div>'+
     '<div><button class="mini" onclick="searchFood()">Search</button></div></div>'+
@@ -609,6 +621,7 @@ function drawSteps(){const s=DB.get('steps',[]).slice().sort((a,b)=>a.date<b.dat
 
 document.getElementById('w-date').value=todayISO();
 document.getElementById('s-date').value=todayISO();
+DB.set('chat',[]);
 renderDash();renderTraining();renderDiet();renderWList();renderSList();renderChips();renderChat();renderShop();
 window.addEventListener('load',drawWeight);
 </script>
